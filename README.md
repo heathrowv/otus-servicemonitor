@@ -5,5 +5,6 @@ kubectl create -f https://raw.githubusercontent.com/prometheus-operator/promethe
 ```
   
 ## Run nginx
-
+```
 kubectl apply -f deployment.yaml
+```
