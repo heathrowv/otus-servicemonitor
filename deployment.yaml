@@ -1,0 +1,116 @@
+---
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: nginx-exporter-test
+spec: {}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-conf
+  namespace: nginx-exporter-test
+data:
+  status.conf: |
+    server {
+        listen 80;
+        server_name status;
+        keepalive_timeout 0;
+    
+        access_log off;
+    
+        allow all;
+    
+        location /basic_status {
+            stub_status on;
+        }
+    }
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: nginx-exporter-test
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - mountPath: /etc/nginx/conf.d
+          name: nginx-conf
+      volumes:
+      - name: nginx-conf
+        configMap:
+          name: nginx-conf
+          items:
+            - key: status.conf
+              path: status.conf
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name:  nginx-svc
+  namespace: nginx-exporter-test
+  labels:
+    app: nginx
+spec:
+  ports:
+  - name: nginx-port
+    port: 80
+    protocol: TCP
+  selector:
+    app: nginx
+
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-exporter
+  namespace: nginx-exporter-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-exporter
+  template:
+    metadata:
+      labels:
+        app: nginx-exporter
+    spec:
+      containers:
+        - name: nginx-exporter
+          image: 'nginx/nginx-prometheus-exporter:0.10.0'
+          args:
+            - '-nginx.scrape-uri=http://nginx-svc.nginx-exporter-test.svc.cluster.local/basic_status'
+          ports:
+            - containerPort: 9113
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: nginx-monitor
+  namespace: nginx-exporter-test
+  labels:
+    app: nginx
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+  endpoints:
+  - port: nginx-port
